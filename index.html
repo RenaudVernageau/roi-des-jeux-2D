@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <link
       rel="apple-touch-icon"
@@ -21,14 +21,15 @@
     />
     <link rel="manifest" href="favicon/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style.css" />
     <title>Roi des jeux</title>
-</head>
+    <script type="module" src="/src/init.js"></script>
+  </head>
 
-<body>
-    <div id="app">
-        <div id="pixi-container"></div>
-    </div>
-    <script type="module" src="/src/chessboard.js"></script>
-</body>
+  <body>
+    <button id="restart" style="position: absolute; top: 1rem; left: 1rem; z-index: 10;">
+  🔄 Restart
+</button>
+    <div id="pixi-container" style="width: 100vw; height: 100vh"></div>
+  </body>
 </html>

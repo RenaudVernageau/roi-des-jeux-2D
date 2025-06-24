@@ -1,84 +1,86 @@
+import { Graphics } from "pixi.js";
+import { isMoveLegal } from "./logic/moveRules.js";
+
 export function makePiecesDraggable(
   sprite,
   app,
   chessBoard,
-  boardContainer, // new
+  boardContainer,
   boardState,
+  gameState,
   boardSize,
   tileSize
 ) {
-  sprite.eventMode = "static";
-  sprite.cursor = "pointer";
-  sprite.zIndex = 0;
+  sprite.interactive = true;
+  sprite.cursor      = "pointer";
 
-  let offsetX = 0;
-  let offsetY = 0;
   let dragging = false;
+  let offsetX = 0, offsetY = 0;
+  const highlights = [];
 
-  sprite.on("pointerdown", (event) => {
-    const pos = event.global;
+  const clearHighlights = () => {
+    highlights.forEach(h => chessBoard.removeChild(h));
+    highlights.length = 0;
+  };
+
+  sprite.on("pointerdown", event => {
+    if (!gameState.canMovePiece(sprite.pieceId)) return;
+    const pos = event.data.getLocalPosition(chessBoard);
     offsetX = pos.x - sprite.x;
     offsetY = pos.y - sprite.y;
     dragging = true;
+    sprite.zIndex = 2;
+    sprite.alpha  = 0.8;
 
-    sprite.zIndex = 1000;
-    sprite.alpha = 0.8;
-  });
-
-  sprite.on("globalpointermove", (event) => {
-    if (dragging) {
-      const pos = event.global;
-      sprite.x = pos.x - offsetX;
-      sprite.y = pos.y - offsetY;
+    clearHighlights();
+    const files = "abcdefgh";
+    for (let f = 0; f < boardSize; f++) {
+      for (let r = 1; r <= boardSize; r++) {
+        const to = `${files[f]}${r}`;
+        if (isMoveLegal(sprite.square, to, boardState.positions)) {
+          const { x, y } = boardState.squareToCoords(to);
+          const hl = new Graphics()
+            .beginFill(0x00ff00, 0.3)
+            .drawRect(x * tileSize, y * tileSize, tileSize, tileSize)
+            .endFill();
+          highlights.push(hl);
+          chessBoard.addChild(hl);
+        }
+      }
     }
   });
 
-  sprite.on("pointerup", (event) => {
+  sprite.on("pointermove", event => {
+    if (!dragging) return;
+    const pos = event.data.getLocalPosition(chessBoard);
+    sprite.x = pos.x - offsetX;
+    sprite.y = pos.y - offsetY;
+  });
+
+  const endDrag = () => {
     if (!dragging) return;
     dragging = false;
-    sprite.alpha = 1;
-    sprite.zIndex = 0;
 
-    const localPos = boardContainer.toLocal(event.global);
+    const file = Math.floor(sprite.x / tileSize);
+    const rank = Math.floor(sprite.y / tileSize);
+    const target = `${String.fromCharCode(97 + file)}${8 - rank}`;
 
-    const boardX = Math.floor(localPos.x / tileSize);
-    const boardY = Math.floor(localPos.y / tileSize);
+    delete boardState.positions[sprite.square];
+    boardState.positions[target] = sprite.pieceId;
+    gameState.recordMove({ from: sprite.square, to: target });
+    sprite.square = target;
 
-    if (
-      boardX >= 0 &&
-      boardX < boardSize &&
-      boardY >= 0 &&
-      boardY < boardSize
-    ) {
-      const newSquare =
-        String.fromCharCode("a".charCodeAt(0) + boardX) + (8 - boardY);
+    const cx = Math.max(0, Math.min(file, boardSize - 1));
+    const cy = Math.max(0, Math.min(rank, boardSize - 1));
+    sprite.x = cx * tileSize + tileSize / 2;
+    sprite.y = cy * tileSize + tileSize / 2;
 
-      delete boardState[sprite.square];
-      boardState[newSquare] = sprite.pieceId;
+    sprite.alpha  = 1;
+    sprite.zIndex = 1;
+    gameState.nextTurn();
+    clearHighlights();
+  };
 
-      sprite.square = newSquare;
-      sprite.x = boardX * tileSize + tileSize * 0.05;
-      sprite.y = boardY * tileSize + tileSize * 0.05;
-    } else {
-      const { x, y } = getCoordsFromSquare(sprite.square);
-      sprite.x = x * tileSize + tileSize * 0.05;
-      sprite.y = y * tileSize + tileSize * 0.05;
-    }
-  });
-
-  sprite.on("pointerupoutside", () => {
-    dragging = false;
-    sprite.alpha = 1;
-    sprite.zIndex = 0;
-
-    const { x, y } = getCoordsFromSquare(sprite.square);
-    sprite.x = x * tileSize + tileSize * 0.05;
-    sprite.y = y * tileSize + tileSize * 0.05;
-  });
-
-  function getCoordsFromSquare(square) {
-    const file = square.charCodeAt(0) - "a".charCodeAt(0);
-    const rank = 8 - parseInt(square[1]);
-    return { x: file, y: rank };
-  }
+  sprite.on("pointerup", endDrag);
+  sprite.on("pointerupoutside", endDrag);
 }
