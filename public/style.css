@@ -39,3 +39,8 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+#move-history {
+  font-size: 0.9rem;
+  color: #333;
+  border-top: 1px solid #ddd;
+}

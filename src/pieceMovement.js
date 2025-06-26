@@ -2,39 +2,62 @@
 import { move, inCheck, legalMovesFrom, getTurn, getKingSquare } from "./logic/gameState.js";
 import { squareToCoords, coordsToSquare } from "./logic/coordinateUtils.js";
 import { Graphics, Ticker } from "pixi.js";
+import { updateHistoryDisplay } from "./init.js";
 
-let sel, orgPos, orgSq, dots = [];
+let sel, orgPos, orgSq, highlights = [];
 
 export function makePiecesDraggable(piecesCont, hlCont, squareGraphics, sounds, ts) {
+  piecesCont.parent.sortableChildren = true;
+  hlCont.sortableChildren = true;
+
   piecesCont.children.forEach(piece => {
     piece.interactive = true;
     piece.buttonMode = true;
     piece
-      .on('pointerdown', e => startDrag(e, hlCont, ts))
+      .on('pointerdown', e => startDrag(e, hlCont, piecesCont, squareGraphics, ts))
       .on('pointermove', dragMove)
       .on('pointerup',   e => endDrag(e, piecesCont, hlCont, squareGraphics, sounds, ts))
       .on('pointerupoutside', e => endDrag(e, piecesCont, hlCont, squareGraphics, sounds, ts));
   });
 }
 
-function startDrag(event, hlCont, ts) {
+function startDrag(event, hlCont, piecesCont, squareGraphics, ts) {
+  highlights.forEach(h => h.parent && h.parent.removeChild(h));
+  highlights = [];
+
   sel = event.currentTarget;
   orgPos = { x: sel.x, y: sel.y };
   orgSq  = coordsToSquare(orgPos.x, orgPos.y, ts);
   sel.data = event.data;
+  piecesCont.sortableChildren = true;
+  sel.zIndex = piecesCont.children.length;
 
-  // Afficher les coups légaux
   const moves = legalMovesFrom(orgSq);
-  dots = moves.map(sq => {
+  moves.forEach(sq => {
     const { x, y } = squareToCoords(sq, ts);
-    const dot = new Graphics()
-      .beginFill(0x333333)
-      .drawCircle(0, 0, ts * 0.1)
-      .endFill();
-    dot.x = x;
-    dot.y = y;
-    hlCont.addChild(dot);
-    return dot;
+    const capSprite = piecesCont.children.find(s => s.name === `piece_${sq}`);
+    let indicator;
+    const size = ts * 0.3;
+    if (capSprite) {
+      indicator = new Graphics()
+        .beginFill(0xff0000, 0.8)
+        .drawRoundedRect(-size/2, -size/2, size, size, size * 0.1)
+        .endFill();
+      indicator.x = capSprite.x;
+      indicator.y = capSprite.y;
+      indicator.zIndex = piecesCont.parent.getChildIndex(piecesCont) + 1;
+      piecesCont.parent.addChild(indicator);
+    } else {
+      indicator = new Graphics()
+        .beginFill(0x555555, 0.5)
+        .drawRoundedRect(-size/2, -size/2, size, size, size * 0.1)
+        .endFill();
+      indicator.x = x;
+      indicator.y = y;
+      indicator.zIndex = hlCont.zIndex;
+      hlCont.addChild(indicator);
+    }
+    highlights.push(indicator);
   });
 
   console.log(`Turn: ${getTurn() === 'w' ? 'White' : 'Black'}`);
@@ -49,128 +72,85 @@ function dragMove() {
 
 function endDrag(event, piecesCont, hlCont, squareGraphics, sounds, ts) {
   if (!sel) return;
+  highlights.forEach(h => h.parent && h.parent.removeChild(h));
+  highlights = [];
 
-  // Nettoyer les pastilles
-  dots.forEach(d => hlCont.removeChild(d));
-  dots = [];
-
-  const dropPos = sel.data.getLocalPosition(sel.parent);
-  const dropSq  = coordsToSquare(dropPos.x, dropPos.y, ts);
-  const res     = move(orgSq, dropSq);
+  const pos = sel.data.getLocalPosition(sel.parent);
+  const dropSq = coordsToSquare(pos.x, pos.y, ts);
+  const res = move(orgSq, dropSq);
 
   if (res) {
-    // Petit ou grand roque ?
     if (res.flags.includes('k') || res.flags.includes('q')) {
       sounds['castle']?.play();
       animateCastling(piecesCont, res, ts);
-    }
-    // Capture
-    else if (res.captured) {
+    } else if (res.captured) {
       sounds['capture']?.play();
-      const capName   = `piece_${dropSq}`;
-      const capSprite = piecesCont.children.find(s => s.name === capName);
-      if (capSprite) piecesCont.removeChild(capSprite);
+      const cap = piecesCont.children.find(s => s.name === `piece_${dropSq}`);
+      if (cap) piecesCont.removeChild(cap);
       const { x, y } = squareToCoords(res.to, ts);
-      sel.x = x;
-      sel.y = y;
-      sel.name = `piece_${res.to}`;
+      sel.x = x; sel.y = y; sel.name = `piece_${res.to}`;
+    } else {
+      const key = inCheck() ? 'move-check' : 'move-self';
+      sounds[key]?.play();
+      const { x, y } = squareToCoords(res.to, ts);
+      sel.x = x; sel.y = y; sel.name = `piece_${res.to}`;
     }
-    // Déplacement simple
-    else {
-      if (inCheck()) sounds['move-check']?.play();
-      else               sounds['move-self']?.play();
-      const { x, y } = squareToCoords(res.to, ts);
-      sel.x = x;
-      sel.y = y;
-      sel.name = `piece_${res.to}`;
+    if (inCheck()) {
+      sounds['check']?.play();
+      animateCheck(squareGraphics, getKingSquare());
     }
 
-    // Échec ?
-    if (inCheck()) {
-      sounds['game-end']; // pas jouer ici
-      const kingSq = getKingSquare();
-      animateCheck(squareGraphics, kingSq);
-    }
+    updateHistoryDisplay();
   } else {
-    // Coup invalide
     sounds['invalid']?.play();
-    sel.x = orgPos.x;
-    sel.y = orgPos.y;
+    sel.x = orgPos.x; sel.y = orgPos.y;
   }
 
   sel.data = null;
   sel = null;
 }
 
-/**
- * Anime le roque (petit ou grand) : le roi et la tour glissent simultanément.
- */
 function animateCastling(piecesCont, moveResult, ts) {
-  const kingFrom  = moveResult.from;
-  const kingTo    = moveResult.to;
-  const rank      = kingTo[1];
-  const isKingSide = moveResult.flags.includes('k');
-  const rookFrom  = `${isKingSide ? 'h' : 'a'}${rank}`;
-  const rookTo    = `${isKingSide ? 'f' : 'd'}${rank}`;
-
-  const kingSprite = piecesCont.children.find(s => s.name === `piece_${kingFrom}`);
-  const rookSprite = piecesCont.children.find(s => s.name === `piece_${rookFrom}`);
-  if (!kingSprite || !rookSprite) return;
-
-  const kingStart = { x: kingSprite.x, y: kingSprite.y };
-  const rookStart = { x: rookSprite.x, y: rookSprite.y };
-  const kingDest  = squareToCoords(kingTo, ts);
-  const rookDest  = squareToCoords(rookTo, ts);
-
-  const steps = 30;
-  let count = 0;
+  const kingFrom = moveResult.from;
+  const kingTo   = moveResult.to;
+  const rank     = kingTo[1];
+  const isKing   = moveResult.flags.includes('k');
+  const rookFrom = `${isKing ? 'h':'a'}${rank}`;
+  const rookTo   = `${isKing ? 'f':'d'}${rank}`;
+  const king = piecesCont.children.find(s => s.name === `piece_${kingFrom}`);
+  const rook = piecesCont.children.find(s => s.name === `piece_${rookFrom}`);
+  if (!king || !rook) return;
+  const kStart = { x: king.x, y: king.y };
+  const rStart = { x: rook.x, y: rook.y };
+  const kDest  = squareToCoords(kingTo, ts);
+  const rDest  = squareToCoords(rookTo, ts);
+  let count = 0; const steps = 30;
   const ticker = new Ticker();
-
   ticker.add(() => {
     count++;
-    const t = Math.min(count / steps, 1);
-    kingSprite.x = kingStart.x + (kingDest.x - kingStart.x) * t;
-    kingSprite.y = kingStart.y + (kingDest.y - kingStart.y) * t;
-    rookSprite.x = rookStart.x + (rookDest.x - rookStart.x) * t;
-    rookSprite.y = rookStart.y + (rookDest.y - rookStart.y) * t;
-
+    const t = Math.min(count/steps, 1);
+    king.x = kStart.x + (kDest.x - kStart.x) * t;
+    king.y = kStart.y + (kDest.y - kStart.y) * t;
+    rook.x = rStart.x + (rDest.x - rStart.x) * t;
+    rook.y = rStart.y + (rDest.y - rStart.y) * t;
     if (count >= steps) {
-      kingSprite.x = kingDest.x;
-      kingSprite.y = kingDest.y;
-      rookSprite.x = rookDest.x;
-      rookSprite.y = rookDest.y;
-      kingSprite.name = `piece_${kingTo}`;
-      rookSprite.name = `piece_${rookTo}`;
+      king.x = kDest.x; king.y = kDest.y;
+      rook.x = rDest.x; rook.y = rDest.y;
+      king.name = `piece_${kingTo}`; rook.name = `piece_${rookTo}`;
       ticker.stop();
     }
   });
-
   ticker.start();
 }
 
-/**
- * Fait clignoter la case du roi en échec (3 flashes rapides).
- */
 function animateCheck(squareGraphics, kingSq) {
-  const square = squareGraphics[kingSq];
-  if (!square) return;
-
-  const pattern = [100, 100, 100];
-  let toggled = false;
-  let step = 0;
-
+  const sq = squareGraphics[kingSq]; if (!sq) return;
+  const pattern = [100, 100, 100]; let toggle = false, step = 0;
   function next() {
-    if (step >= pattern.length) {
-      square.tint  = 0xffffff;
-      square.alpha = 1;
-      return;
-    }
-    square.tint  = toggled ? 0xffffff : 0xff0000;
-    square.alpha = toggled ? 1 : 0.5;
-    toggled = !toggled;
-    setTimeout(next, pattern[step]);
-    step++;
+    if (step >= pattern.length) { sq.tint = 0xffffff; sq.alpha = 1; return; }
+    sq.tint = toggle ? 0xffffff : 0xff0000;
+    sq.alpha = toggle ? 1 : 0.5;
+    toggle = !toggle; setTimeout(next, pattern[step]); step++;
   }
-
   next();
 }
