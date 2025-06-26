@@ -12,21 +12,37 @@ import { makePiecesDraggable } from "./pieceMovement.js";
   const maxBoardWidth = Math.min(window.innerWidth, window.innerHeight) * 0.8;
   const tileSize = Math.floor(maxBoardWidth / boardSize);
 
-  // Précharger sons
-  const sounds = {
-    move: new Audio('/assets/sounds/move.mp3'),
-    capture: new Audio('/assets/sounds/capture.mp3'),
-    check: new Audio('/assets/sounds/check.mp3'),
-  };
+  // List out each basename (without extension)
+  const soundFiles = [
+    "capture",
+    "castle",
+    "game-end",
+    "move-check",
+    "move-self",
+  ];
 
-  const { boardContainer, piecesContainer, highlightsContainer, squareGraphics } = await createBoard(
-    app.stage,
-    boardSize,
-    tileSize
-  );
+  const sounds = {};
+  soundFiles.forEach((name) => {
+    const audio = new Audio(`/assets/sounds/${name}.mp3`);
+    audio.volume = 0.2;
+    sounds[name] = audio;
+  });
+
+  const {
+    boardContainer,
+    piecesContainer,
+    highlightsContainer,
+    squareGraphics,
+  } = await createBoard(app.stage, boardSize, tileSize);
 
   boardContainer.x = (app.screen.width - tileSize * boardSize) / 2;
   boardContainer.y = (app.screen.height - tileSize * boardSize) / 2;
 
-  makePiecesDraggable(piecesContainer, highlightsContainer, squareGraphics, sounds, tileSize);
+  makePiecesDraggable(
+    piecesContainer,
+    highlightsContainer,
+    squareGraphics,
+    sounds,
+    tileSize
+  );
 })();

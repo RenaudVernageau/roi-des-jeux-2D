@@ -14,9 +14,28 @@ body {
   align-items: center;
 }
 
-#restart {
+/* Barre de navigation fixe en haut, blanche semi-transparente */
+.navbar {
   position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 10;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 0.5rem 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center; /* centre horizontalement */
+  z-index: 1000;
 }
+
+/* Style du bouton Restart */
+#restart {
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+  /* vous pouvez ajouter un léger ombrage si vous voulez */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+

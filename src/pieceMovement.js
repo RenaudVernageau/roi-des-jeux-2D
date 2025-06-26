@@ -31,7 +31,8 @@ function startDrag(event, hlCont, ts) {
       .beginFill(0x333333)
       .drawCircle(0, 0, ts * 0.1)
       .endFill();
-    dot.x = x; dot.y = y;
+    dot.x = x;
+    dot.y = y;
     hlCont.addChild(dot);
     return dot;
   });
@@ -58,34 +59,41 @@ function endDrag(event, piecesCont, hlCont, squareGraphics, sounds, ts) {
   const res     = move(orgSq, dropSq);
 
   if (res) {
-    sounds.move.play();
-
     // Petit ou grand roque ?
     if (res.flags.includes('k') || res.flags.includes('q')) {
+      sounds['castle']?.play();
       animateCastling(piecesCont, res, ts);
-    } else {
-      // capture
-      if (res.captured) {
-        sounds.capture.play();
-        const capName   = `piece_${dropSq}`;
-        const capSprite = piecesCont.children.find(s => s.name === capName);
-        if (capSprite) piecesCont.removeChild(capSprite);
-      }
-      // déplacement simple
+    }
+    // Capture
+    else if (res.captured) {
+      sounds['capture']?.play();
+      const capName   = `piece_${dropSq}`;
+      const capSprite = piecesCont.children.find(s => s.name === capName);
+      if (capSprite) piecesCont.removeChild(capSprite);
+      const { x, y } = squareToCoords(res.to, ts);
+      sel.x = x;
+      sel.y = y;
+      sel.name = `piece_${res.to}`;
+    }
+    // Déplacement simple
+    else {
+      if (inCheck()) sounds['move-check']?.play();
+      else               sounds['move-self']?.play();
       const { x, y } = squareToCoords(res.to, ts);
       sel.x = x;
       sel.y = y;
       sel.name = `piece_${res.to}`;
     }
 
-    // échec ?
+    // Échec ?
     if (inCheck()) {
-      sounds.check.play();
+      sounds['game-end']; // pas jouer ici
       const kingSq = getKingSquare();
       animateCheck(squareGraphics, kingSq);
     }
   } else {
-    // revert si invalide
+    // Coup invalide
+    sounds['invalid']?.play();
     sel.x = orgPos.x;
     sel.y = orgPos.y;
   }
@@ -98,12 +106,12 @@ function endDrag(event, piecesCont, hlCont, squareGraphics, sounds, ts) {
  * Anime le roque (petit ou grand) : le roi et la tour glissent simultanément.
  */
 function animateCastling(piecesCont, moveResult, ts) {
-  const kingFrom = moveResult.from;
-  const kingTo   = moveResult.to;
-  const rank     = kingTo[1];
+  const kingFrom  = moveResult.from;
+  const kingTo    = moveResult.to;
+  const rank      = kingTo[1];
   const isKingSide = moveResult.flags.includes('k');
-  const rookFrom = `${isKingSide ? 'h' : 'a'}${rank}`;
-  const rookTo   = `${isKingSide ? 'f' : 'd'}${rank}`;
+  const rookFrom  = `${isKingSide ? 'h' : 'a'}${rank}`;
+  const rookTo    = `${isKingSide ? 'f' : 'd'}${rank}`;
 
   const kingSprite = piecesCont.children.find(s => s.name === `piece_${kingFrom}`);
   const rookSprite = piecesCont.children.find(s => s.name === `piece_${rookFrom}`);
@@ -163,5 +171,6 @@ function animateCheck(squareGraphics, kingSq) {
     setTimeout(next, pattern[step]);
     step++;
   }
+
   next();
 }
